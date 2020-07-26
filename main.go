@@ -25,12 +25,6 @@ func main() {
 	}
 	log.Printf("Network interface: %s", link.Attrs().Name)
 
-	upstream, err := getUpstream(link.Attrs().Name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Connected to %s on %s", upstream.Name, upstream.Port)
-
 	api, err := findAPI(link)
 	if err != nil {
 		log.Fatal(err)
@@ -46,6 +40,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	upstream, err := getUpstream(link.Attrs().Name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Connected to %s on %s", upstream.Name, upstream.Port)
 
 	devices, err := unifi.ListDevices()
 	if err != nil {

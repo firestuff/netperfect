@@ -210,7 +210,11 @@ func (d *Device) PathHop(path []*Device, visited map[string]*Device) {
 }
 
 func (d *Device) LogHop(prefix string, last bool) {
-	log.Printf("%s+- %s", prefix, d.Name)
+	if last {
+		log.Printf("%s└─ %s", prefix, d.Name)
+	} else {
+		log.Printf("%s├─ %s", prefix, d.Name)
+	}
 
 	names := []string{}
 	for _, next := range d.Beyond {
@@ -224,7 +228,7 @@ func (d *Device) LogHop(prefix string, last bool) {
 		if last {
 			next.LogHop(fmt.Sprintf("%s   ", prefix), i == len(names) - 1)
 		} else {
-			next.LogHop(fmt.Sprintf("%s|  ", prefix), i == len(names) - 1)
+			next.LogHop(fmt.Sprintf("%s│  ", prefix), i == len(names) - 1)
 		}
 		i++
 	}
