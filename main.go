@@ -31,11 +31,23 @@ func main() {
 	}
 	log.Printf("UniFi API URL: %s", api)
 
+	/*
 	upstream, err := getUpstream(link.Attrs().Name)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Connected to %s [%s] on %s", upstream.device, upstream.addr, upstream.port)
+	*/
+
+	unifi, err := NewClient(api)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = unifi.Login()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 type upstream struct {
@@ -137,7 +149,7 @@ func findApis(start_ip, end_ip uint32) ([]string, error) {
 			defer cancel()
 
 			url := fmt.Sprintf(
-				"https://%d.%d.%d.%d/",
+				"https://%d.%d.%d.%d",
 				ip >> 24 & 0xff,
 				ip >> 16 & 0xff,
 				ip >> 8 & 0xff,
