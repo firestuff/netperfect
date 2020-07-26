@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,7 +29,9 @@ type Device struct {
 	MAC string `json:"mac"`
 
 	// Constructed fields
-	Neighbors map[string]*Device
+	Neighbors map[string]*Device // all device peers
+	Beyond map[string]*Device // device peers that we reach through this device
+	Path []*Device
 
 	// Intermediate data; ignore
 	Ports []*Port `json:"port_table"`
@@ -157,30 +160,74 @@ func (c *Client) ListDevices() (map[string]*Device, error) {
 	ret := map[string]*Device{}
 
 	for _, dev := range device_resp.Data {
+		dev.Neighbors = map[string]*Device{}
+		dev.Beyond = map[string]*Device{}
+		dev.Path = []*Device{}
 		dev.MAC = strings.ToUpper(dev.MAC)
-		ret[dev.MAC] = dev
+
+		if ret[dev.Name] != nil {
+			return nil, fmt.Errorf("Duplicate UniFi device names: %s", dev.Name)
+		}
+
+		ret[dev.Name] = dev
 	}
 
 	// Second loop after the table is populated
 	for _, dev := range ret {
-		dev.Neighbors = map[string]*Device{}
-
 		for _, port := range dev.Ports {
 			for _, lldp := range port.LLDP {
 				lldp.MAC = strings.ToUpper(lldp.MAC)
 
-				neighbor := ret[lldp.MAC]
+				neighbor := ret[lldp.Name]
 				if neighbor == nil {
 					continue
 				}
 
-				dev.Neighbors[neighbor.MAC] = neighbor
+				dev.Neighbors[neighbor.Name] = neighbor
 			}
 		}
 		dev.Ports = nil
 	}
 
 	return ret, nil
+}
+
+func (d *Device) PathHop(path []*Device, visited map[string]*Device) {
+	newPath := append(path, d)
+
+	d.Path = newPath
+	visited[d.Name] = d
+
+	for _, neighbor := range d.Neighbors {
+		if visited[neighbor.Name] != nil {
+			// Cycle
+			continue
+		}
+
+		d.Beyond[neighbor.Name] = neighbor
+		neighbor.PathHop(newPath, visited)
+	}
+}
+
+func (d *Device) LogHop(prefix string, last bool) {
+	log.Printf("%s+- %s", prefix, d.Name)
+
+	names := []string{}
+	for _, next := range d.Beyond {
+		names = append(names, next.Name)
+	}
+	sort.Strings(names)
+
+	i := 0
+	for _, name := range names {
+		next := d.Beyond[name]
+		if last {
+			next.LogHop(fmt.Sprintf("%s   ", prefix), i == len(names) - 1)
+		} else {
+			next.LogHop(fmt.Sprintf("%s|  ", prefix), i == len(names) - 1)
+		}
+		i++
+	}
 }
 
 func loadCreds() (*Creds, error) {

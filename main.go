@@ -25,19 +25,17 @@ func main() {
 	}
 	log.Printf("Network interface: %s", link.Attrs().Name)
 
+	upstream, err := getUpstream(link.Attrs().Name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Connected to %s on %s", upstream.Name, upstream.Port)
+
 	api, err := findAPI(link)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("UniFi API URL: %s", api)
-
-	/*
-	upstream, err := getUpstream(link.Attrs().Name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Connected to %s [%s] on %s", upstream.device, upstream.addr, upstream.port)
-	*/
 
 	unifi, err := NewClient(api)
 	if err != nil {
@@ -54,18 +52,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for _, dev := range devices {
-		log.Printf("%#v", dev)
+	upstream_dev := devices[upstream.Name]
+	if upstream_dev == nil {
+		log.Fatalf("Can't find my upstream in UniFi device list")
 	}
+
+	upstream_dev.PathHop([]*Device{}, map[string]*Device{})
+	upstream_dev.LogHop("", true)
 }
 
-type upstream struct {
-	device string
-	port string
-	addr net.Addr
+type Upstream struct {
+	Name string
+	Port string
+	MAC string
 }
 
-func getUpstream(intName string) (*upstream, error) {
+func getUpstream(intName string) (*Upstream, error) {
 	intr, err := net.InterfaceByName(intName)
 	if err != nil {
 		return nil, err
@@ -95,16 +97,16 @@ func getUpstream(intName string) (*upstream, error) {
 		return nil, err
 	}
 
-	ret := &upstream {
-		addr: addr,
+	ret := &Upstream {
+		MAC: strings.ToUpper(addr.String()),
 	}
 
 	for _, tlv := range lldpFrame.Optional {
 		switch tlv.Type {
 		case lldp.TLVTypePortDescription:
-			ret.port = strings.ToLower(string(tlv.Value))
+			ret.Port = strings.ToLower(string(tlv.Value))
 		case lldp.TLVTypeSystemName:
-			ret.device = string(tlv.Value)
+			ret.Name = string(tlv.Value)
 		}
 	}
 
