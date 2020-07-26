@@ -25,7 +25,7 @@ func main() {
 	}
 	log.Printf("Network interface: %s", link.Attrs().Name)
 
-	api, err := findApi(link)
+	api, err := findAPI(link)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,6 +47,15 @@ func main() {
 	err = unifi.Login()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	devices, err := unifi.ListDevices()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, dev := range devices {
+		log.Printf("%#v", dev)
 	}
 }
 
@@ -102,7 +111,7 @@ func getUpstream(intName string) (*upstream, error) {
 	return ret, nil
 }
 
-func findApi(link netlink.Link) (string, error) {
+func findAPI(link netlink.Link) (string, error) {
 	addrs, err := netlink.AddrList(link, 2 /* AF_INET */)
 	if err != nil {
 		return "", err
@@ -116,7 +125,7 @@ func findApi(link netlink.Link) (string, error) {
 		start := ip & mask
 		end := ip | (^mask & 0xffffffff)
 
-		addr_apis, err := findApis(start, end)
+		addr_apis, err := findAPIs(start, end)
 		if err != nil {
 			return "", err
 		}
@@ -135,7 +144,7 @@ func findApi(link netlink.Link) (string, error) {
 	return apis[0], nil
 }
 
-func findApis(start_ip, end_ip uint32) ([]string, error) {
+func findAPIs(start_ip, end_ip uint32) ([]string, error) {
 	wg := sync.WaitGroup{}
 	wg.Add(int(end_ip - start_ip + 1))
 

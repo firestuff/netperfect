@@ -22,6 +22,32 @@ type Client struct {
 	base_url string
 }
 
+type Device struct {
+	// Fields directly from UniFi
+	Name string `json:"name"`
+	MAC string `json:"mac"`
+
+	// Constructed fields
+	Neighbors map[string]*Device
+
+	// Intermediate data; ignore
+	Ports []*Port `json:"port_table"`
+}
+
+type Port struct {
+	LLDP []*LLDP `json:"lldp_table"`
+}
+
+type LLDP struct {
+	MAC string `json:"lldp_chassis_id"`
+	Port string `json:"lldp_port_id"`
+	Name string `json:"lldp_system_name"`
+}
+
+type DeviceResp struct {
+	Data []*Device `json:"data"`
+}
+
 func NewClient(base_url string) (*Client, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -69,6 +95,9 @@ func (c *Client) Login() error {
 	}
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/auth/login", c.base_url), bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http_client.Do(req)
@@ -97,6 +126,61 @@ func (c *Client) Login() error {
 	}
 
 	return nil
+}
+
+func (c *Client) ListDevices() (map[string]*Device, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/proxy/network/api/s/default/stat/device", c.base_url), nil)
+
+	resp, err := c.http_client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		dec := json.NewDecoder(resp.Body)
+		error_resp := ErrorResp{}
+		err = dec.Decode(&error_resp)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%s", error_resp.Errors[0])
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	device_resp := DeviceResp{}
+	err = dec.Decode(&device_resp)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := map[string]*Device{}
+
+	for _, dev := range device_resp.Data {
+		dev.MAC = strings.ToUpper(dev.MAC)
+		ret[dev.MAC] = dev
+	}
+
+	// Second loop after the table is populated
+	for _, dev := range ret {
+		dev.Neighbors = map[string]*Device{}
+
+		for _, port := range dev.Ports {
+			for _, lldp := range port.LLDP {
+				lldp.MAC = strings.ToUpper(lldp.MAC)
+
+				neighbor := ret[lldp.MAC]
+				if neighbor == nil {
+					continue
+				}
+
+				dev.Neighbors[neighbor.MAC] = neighbor
+			}
+		}
+		dev.Ports = nil
+	}
+
+	return ret, nil
 }
 
 func loadCreds() (*Creds, error) {
